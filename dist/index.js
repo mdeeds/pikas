@@ -41,7 +41,6 @@ class Game {
     renderer;
     physicsWorld;
     pikas = [];
-    tank;
     constructor(ammo) {
         this.ammo = ammo;
         this.renderer = new THREE.WebGLRenderer();
@@ -49,12 +48,7 @@ class Game {
         this.setUpCamera();
         this.setUpLight();
         this.setUpPhysics();
-        this.tank = this.setUpTank();
-        let floorGeometry = new THREE.BoxGeometry(5, 0.01, 1);
-        let floorMesh = new THREE.Mesh(floorGeometry, new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
-        floorMesh.receiveShadow = true;
-        floorMesh.position.set(0, -0.1, 0);
-        this.scene.add(floorMesh);
+        this.setUpTank();
         this.setUpRenderer();
         this.setUpAnimation();
     }
@@ -102,7 +96,7 @@ class Game {
         this.renderer.xr.enabled = true;
     }
     addPika() {
-        const pika = new pika_1.Pika(new THREE.Vector3(0, 0.5, 0), this.ammo, this.physicsWorld);
+        const pika = new pika_1.Pika(new THREE.Vector3(0.01 * (Math.random() - 0.5), 0.5, 0.01 * (Math.random() - 0.5)), this.ammo, this.physicsWorld);
         this.scene.add(pika);
         this.pikas.push(pika);
     }
@@ -120,11 +114,10 @@ class Game {
             this.renderer.render(this.scene, this.camera);
         });
     }
-    setUpTank() {
-        const shape = new this.ammo.btBoxShape(new this.ammo.btVector3(10, 1, 0.5));
+    addPlane(normal, offset) {
+        const shape = new this.ammo.btStaticPlaneShape(normal, offset);
         const ammoTransform = new this.ammo.btTransform();
         ammoTransform.setIdentity();
-        ammoTransform.setOrigin(new this.ammo.btVector3(0, -1, 0));
         const mass = 0; // Zero mass tells Ammo that this object does not move.
         const localInertia = new this.ammo.btVector3(0, 0, 0);
         const motionState = new this.ammo.btDefaultMotionState(ammoTransform);
@@ -133,7 +126,18 @@ class Game {
         body.setRestitution(0.8);
         // body.setLinearVelocity(new this.ammo.btVector3(0, 0, 0));
         this.physicsWorld.addRigidBody(body);
-        return body;
+    }
+    setUpTank() {
+        this.addPlane(new this.ammo.btVector3(0, 1, 0), 0);
+        this.addPlane(new this.ammo.btVector3(-1, 0, 0), -10);
+        this.addPlane(new this.ammo.btVector3(1, 0, 0), -10);
+        this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
+        this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
+        let floorGeometry = new THREE.BoxGeometry(5, 0.01, 1);
+        let floorMesh = new THREE.Mesh(floorGeometry, new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
+        floorMesh.receiveShadow = true;
+        floorMesh.position.set(0, -0.01, 0);
+        this.scene.add(floorMesh);
     }
 }
 exports.Game = Game;
@@ -191,11 +195,11 @@ class Pika extends THREE.Group {
     // Forward is in the positive Z direction.
     static kRadius = 0.05;
     static kLength = 0.20;
-    static kDenseRadius = 0.01;
+    static kDenseRadius = 0.03;
     setGeometry() {
         let ballGeometry = new THREE.IcosahedronBufferGeometry(Pika.kRadius, 3);
         ballGeometry.scale(1, 1, Pika.kLength / (2 * Pika.kRadius));
-        ballGeometry.translate(0, -Pika.kRadius, 0);
+        ballGeometry.translate(0, 0, 0);
         ballGeometry = BufferGeometryUtils.mergeVertices(ballGeometry, 0.001);
         ballGeometry.computeVertexNormals();
         const ballMesh = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
@@ -206,10 +210,10 @@ class Pika extends THREE.Group {
     addToPhysics() {
         const outerShell = new this.ammo.btSphereShape(Pika.kRadius);
         outerShell.setLocalScaling(new this.ammo.btVector3(1, 1, Pika.kLength / (2 * Pika.kRadius)));
-        const innerShell = new this.ammo.btSphereShape(Pika.kDenseRadius);
-        const innerBody = this.makeRigidBody(innerShell, Pika.kDenseRadius, 0.107 /*g*/);
-        const outerBody = this.makeRigidBody(outerShell, Pika.kRadius, 0.001 /*g*/);
-        outerBody.setDamping(0.01, 5);
+        // const innerShell = new this.ammo.btSphereShape(Pika.kDenseRadius);
+        const innerShell = new this.ammo.btBoxShape(new this.ammo.btVector3(Pika.kDenseRadius, Pika.kDenseRadius, 2 * Pika.kDenseRadius));
+        const innerBody = this.makeRigidBody(innerShell, Pika.kDenseRadius, 0.100 /*g*/);
+        const outerBody = this.makeRigidBody(outerShell, Pika.kRadius, 0.050 /*g*/);
         const constraint = new this.ammo.btFixedConstraint(innerBody, outerBody, innerBody.getWorldTransform(), outerBody.getWorldTransform());
         this.physicsWorld.addConstraint(constraint, true);
         this.physicsWorld.addRigidBody(innerBody);
@@ -219,7 +223,7 @@ class Pika extends THREE.Group {
     makeRigidBody(shape, radius, mass) {
         const ammoTransform = new this.ammo.btTransform();
         ammoTransform.setIdentity();
-        ammoTransform.setOrigin(new this.ammo.btVector3(this.position.x, this.position.y - radius, this.position.z));
+        ammoTransform.setOrigin(new this.ammo.btVector3(this.position.x, this.position.y, this.position.z));
         const localInertia = new this.ammo.btVector3(0, 0, 0);
         const motionState = new this.ammo.btDefaultMotionState(ammoTransform);
         shape.calculateLocalInertia(mass, localInertia);

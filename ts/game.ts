@@ -9,7 +9,6 @@ export class Game {
   private renderer: THREE.WebGLRenderer;
   private physicsWorld: Ammo.btDiscreteDynamicsWorld;
   private pikas: Pika[] = [];
-  private tank: Ammo.btRigidBody;
 
   private constructor(private ammo: typeof Ammo) {
     this.renderer = new THREE.WebGLRenderer();
@@ -19,14 +18,7 @@ export class Game {
     this.setUpCamera();
     this.setUpLight();
     this.setUpPhysics();
-    this.tank = this.setUpTank();
-
-    let floorGeometry = new THREE.BoxGeometry(5, 0.01, 1);
-    let floorMesh = new THREE.Mesh(floorGeometry,
-      new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
-    floorMesh.receiveShadow = true;
-    floorMesh.position.set(0, -0.1, 0);
-    this.scene.add(floorMesh);
+    this.setUpTank();
 
     this.setUpRenderer();
     this.setUpAnimation();
@@ -87,8 +79,9 @@ export class Game {
   }
 
   private addPika() {
-    const pika = new Pika(new THREE.Vector3(0, 0.5, 0), this.ammo,
-      this.physicsWorld);
+    const pika = new Pika(new THREE.Vector3(
+      0.01 * (Math.random() - 0.5), 0.5, 0.01 * (Math.random() - 0.5)),
+      this.ammo, this.physicsWorld);
     this.scene.add(pika);
     this.pikas.push(pika);
   }
@@ -109,11 +102,10 @@ export class Game {
     })
   }
 
-  private setUpTank(): Ammo.btRigidBody {
-    const shape = new this.ammo.btBoxShape(new this.ammo.btVector3(10, 1, 0.5));
+  private addPlane(normal: Ammo.btVector3, offset: number) {
+    const shape = new this.ammo.btStaticPlaneShape(normal, offset)
     const ammoTransform = new this.ammo.btTransform();
     ammoTransform.setIdentity();
-    ammoTransform.setOrigin(new this.ammo.btVector3(0, -1, 0));
     const mass = 0;  // Zero mass tells Ammo that this object does not move.
     const localInertia = new this.ammo.btVector3(0, 0, 0);
     const motionState = new this.ammo.btDefaultMotionState(ammoTransform);
@@ -124,6 +116,22 @@ export class Game {
     body.setRestitution(0.8);
     // body.setLinearVelocity(new this.ammo.btVector3(0, 0, 0));
     this.physicsWorld.addRigidBody(body);
-    return body;
+  }
+
+  private setUpTank() {
+    this.addPlane(new this.ammo.btVector3(0, 1, 0), 0);
+    this.addPlane(new this.ammo.btVector3(-1, 0, 0), -10);
+    this.addPlane(new this.ammo.btVector3(1, 0, 0), -10);
+    this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
+    this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
+
+
+    let floorGeometry = new THREE.BoxGeometry(5, 0.01, 1);
+    let floorMesh = new THREE.Mesh(floorGeometry,
+      new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
+    floorMesh.receiveShadow = true;
+    floorMesh.position.set(0, -0.01, 0);
+    this.scene.add(floorMesh);
+
   }
 }
