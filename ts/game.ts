@@ -1,32 +1,25 @@
 import * as THREE from "three";
 import Ammo from "ammojs-typed";
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
-import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { BufferGeometry } from "three";
+import { Pika } from "./pika";
 
 export class Game {
   private camera: THREE.Camera;
   private scene: THREE.Scene;
   private renderer: THREE.WebGLRenderer;
+  private physicsWorld: Ammo.btDiscreteDynamicsWorld;
+  private pikas: Pika[] = [];
+  private tank: Ammo.btRigidBody;
 
   private constructor(private ammo: typeof Ammo) {
     this.renderer = new THREE.WebGLRenderer();
 
-    this.setUpCamera();
-
     this.scene = new THREE.Scene();
-    this.scene.add(this.camera);
 
-    let ballGeometry: BufferGeometry =
-      new THREE.IcosahedronBufferGeometry(0.5, 3);
-    ballGeometry = BufferGeometryUtils.mergeVertices(ballGeometry, 0.001);
-    ballGeometry.computeVertexNormals();
-    const ballMesh = new THREE.Mesh(ballGeometry,
-      new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
-    ballMesh.position.set(0, 0.5, 0);
-    ballMesh.castShadow = true;
-    ballMesh.receiveShadow = true;
-    this.scene.add(ballMesh);
+    this.setUpCamera();
+    this.setUpLight();
+    this.setUpPhysics();
+    this.tank = this.setUpTank();
 
     let floorGeometry = new THREE.BoxGeometry(5, 0.01, 1);
     let floorMesh = new THREE.Mesh(floorGeometry,
@@ -37,7 +30,6 @@ export class Game {
 
     this.setUpRenderer();
     this.setUpAnimation();
-
   }
 
   static async make(): Promise<Game> {
@@ -48,12 +40,27 @@ export class Game {
     })
   }
 
+  private setUpPhysics() {
+    // Physics configuration
+    const collisionConfiguration =
+      new this.ammo.btDefaultCollisionConfiguration();
+    const dispatcher = new this.ammo.btCollisionDispatcher(
+      collisionConfiguration);
+    const broadphase = new this.ammo.btDbvtBroadphase();
+    const solver = new this.ammo.btSequentialImpulseConstraintSolver();
+    this.physicsWorld = new this.ammo.btDiscreteDynamicsWorld(
+      dispatcher, broadphase,
+      solver, collisionConfiguration);
+    this.physicsWorld.setGravity(new this.ammo.btVector3(0, -9.8, 0));
+  }
+
   private setUpCamera() {
     this.camera = new THREE.PerspectiveCamera(
       75, window.innerWidth / window.innerHeight, /*near=*/0.1,
       /*far=*/100);
     this.camera.position.set(0, 1.7, 3);
     this.camera.lookAt(0, 0, 0);
+    this.scene.add(this.camera);
   }
 
   private setUpLight() {
@@ -79,11 +86,44 @@ export class Game {
     this.renderer.xr.enabled = true;
   }
 
+  private addPika() {
+    const pika = new Pika(new THREE.Vector3(0, 0.5, 0), this.ammo,
+      this.physicsWorld);
+    this.scene.add(pika);
+    this.pikas.push(pika);
+  }
+
   private setUpAnimation() {
     const clock = new THREE.Clock();
     this.renderer.setAnimationLoop(() => {
       const deltaS = clock.getDelta();
+      if (clock.elapsedTime > this.pikas.length && this.pikas.length < 100) {
+        this.addPika();
+      }
+
+      this.physicsWorld.stepSimulation(deltaS, /*substeps=*/4);
+      for (const p of this.pikas) {
+        p.updatePositionFromPhysics();
+      }
       this.renderer.render(this.scene, this.camera);
     })
+  }
+
+  private setUpTank(): Ammo.btRigidBody {
+    const shape = new this.ammo.btBoxShape(new this.ammo.btVector3(10, 1, 0.5));
+    const ammoTransform = new this.ammo.btTransform();
+    ammoTransform.setIdentity();
+    ammoTransform.setOrigin(new this.ammo.btVector3(0, -1, 0));
+    const mass = 0;  // Zero mass tells Ammo that this object does not move.
+    const localInertia = new this.ammo.btVector3(0, 0, 0);
+    const motionState = new this.ammo.btDefaultMotionState(ammoTransform);
+    shape.calculateLocalInertia(mass, localInertia);
+    const body = new this.ammo.btRigidBody(
+      new this.ammo.btRigidBodyConstructionInfo(
+        mass, motionState, shape, localInertia));
+    body.setRestitution(0.8);
+    // body.setLinearVelocity(new this.ammo.btVector3(0, 0, 0));
+    this.physicsWorld.addRigidBody(body);
+    return body;
   }
 }

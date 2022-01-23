@@ -33,31 +33,55 @@ exports.Game = void 0;
 const THREE = __importStar(__webpack_require__(578));
 const ammojs_typed_1 = __importDefault(__webpack_require__(736));
 const VRButton_js_1 = __webpack_require__(652);
-const BufferGeometryUtils = __importStar(__webpack_require__(58));
+const pika_1 = __webpack_require__(443);
 class Game {
     ammo;
     camera;
     scene;
     renderer;
+    physicsWorld;
+    pikas = [];
+    tank;
     constructor(ammo) {
         this.ammo = ammo;
         this.renderer = new THREE.WebGLRenderer();
-        this.setUpCamera();
         this.scene = new THREE.Scene();
-        this.scene.add(this.camera);
-        let ballGeometry = new THREE.IcosahedronBufferGeometry(0.5, 3);
-        ballGeometry = BufferGeometryUtils.mergeVertices(ballGeometry, 0.001);
-        ballGeometry.computeVertexNormals();
-        const ballMesh = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
-        ballMesh.position.set(0, 0.5, 0);
-        ballMesh.castShadow = true;
-        ballMesh.receiveShadow = true;
-        this.scene.add(ballMesh);
+        this.setUpCamera();
+        this.setUpLight();
+        this.setUpPhysics();
+        this.tank = this.setUpTank();
         let floorGeometry = new THREE.BoxGeometry(5, 0.01, 1);
         let floorMesh = new THREE.Mesh(floorGeometry, new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
         floorMesh.receiveShadow = true;
         floorMesh.position.set(0, -0.1, 0);
         this.scene.add(floorMesh);
+        this.setUpRenderer();
+        this.setUpAnimation();
+    }
+    static async make() {
+        return new Promise((resolve) => {
+            (0, ammojs_typed_1.default)().then((lib) => {
+                resolve(new Game(lib));
+            });
+        });
+    }
+    setUpPhysics() {
+        // Physics configuration
+        const collisionConfiguration = new this.ammo.btDefaultCollisionConfiguration();
+        const dispatcher = new this.ammo.btCollisionDispatcher(collisionConfiguration);
+        const broadphase = new this.ammo.btDbvtBroadphase();
+        const solver = new this.ammo.btSequentialImpulseConstraintSolver();
+        this.physicsWorld = new this.ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
+        this.physicsWorld.setGravity(new this.ammo.btVector3(0, -9.8, 0));
+    }
+    setUpCamera() {
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, /*near=*/ 0.1, 
+        /*far=*/ 100);
+        this.camera.position.set(0, 1.7, 3);
+        this.camera.lookAt(0, 0, 0);
+        this.scene.add(this.camera);
+    }
+    setUpLight() {
         const light = new THREE.DirectionalLight(0xffffff, 1.0);
         light.castShadow = true;
         light.shadow.mapSize.width = 1024;
@@ -69,21 +93,6 @@ class Game {
         this.scene.add(light);
         const ambient = new THREE.AmbientLight(0xddddff, 0.2);
         this.scene.add(ambient);
-        this.setUpRenderer();
-        this.setUpAnimation();
-    }
-    static async make() {
-        return new Promise((resolve) => {
-            (0, ammojs_typed_1.default)().then((lib) => {
-                resolve(new Game(lib));
-            });
-        });
-    }
-    setUpCamera() {
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, /*near=*/ 0.1, 
-        /*far=*/ 100);
-        this.camera.position.set(0, 1.7, 3);
-        this.camera.lookAt(0, 0, 0);
     }
     setUpRenderer() {
         this.renderer.shadowMap.enabled = true;
@@ -92,16 +101,135 @@ class Game {
         document.body.appendChild(VRButton_js_1.VRButton.createButton(this.renderer));
         this.renderer.xr.enabled = true;
     }
+    addPika() {
+        const pika = new pika_1.Pika(new THREE.Vector3(0, 0.5, 0), this.ammo, this.physicsWorld);
+        this.scene.add(pika);
+        this.pikas.push(pika);
+    }
     setUpAnimation() {
         const clock = new THREE.Clock();
         this.renderer.setAnimationLoop(() => {
             const deltaS = clock.getDelta();
+            if (clock.elapsedTime > this.pikas.length && this.pikas.length < 100) {
+                this.addPika();
+            }
+            this.physicsWorld.stepSimulation(deltaS, /*substeps=*/ 4);
+            for (const p of this.pikas) {
+                p.updatePositionFromPhysics();
+            }
             this.renderer.render(this.scene, this.camera);
         });
+    }
+    setUpTank() {
+        const shape = new this.ammo.btBoxShape(new this.ammo.btVector3(10, 1, 0.5));
+        const ammoTransform = new this.ammo.btTransform();
+        ammoTransform.setIdentity();
+        ammoTransform.setOrigin(new this.ammo.btVector3(0, -1, 0));
+        const mass = 0; // Zero mass tells Ammo that this object does not move.
+        const localInertia = new this.ammo.btVector3(0, 0, 0);
+        const motionState = new this.ammo.btDefaultMotionState(ammoTransform);
+        shape.calculateLocalInertia(mass, localInertia);
+        const body = new this.ammo.btRigidBody(new this.ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia));
+        body.setRestitution(0.8);
+        // body.setLinearVelocity(new this.ammo.btVector3(0, 0, 0));
+        this.physicsWorld.addRigidBody(body);
+        return body;
     }
 }
 exports.Game = Game;
 //# sourceMappingURL=game.js.map
+
+/***/ }),
+
+/***/ 443:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Pika = void 0;
+const THREE = __importStar(__webpack_require__(578));
+const BufferGeometryUtils = __importStar(__webpack_require__(58));
+class Pika extends THREE.Group {
+    ammo;
+    physicsWorld;
+    constructor(position, ammo, physicsWorld) {
+        super();
+        this.ammo = ammo;
+        this.physicsWorld = physicsWorld;
+        this.position.copy(position);
+        this.setGeometry();
+        this.addToPhysics();
+    }
+    updatePositionFromPhysics() {
+        const physicsObject = this.userData['physicsObject'];
+        const worldTransform = physicsObject.getWorldTransform();
+        const position = worldTransform.getOrigin();
+        this.position.set(position.x(), position.y(), position.z());
+        const rotation = worldTransform.getRotation();
+        this.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+    }
+    // Forward is in the positive Z direction.
+    static kRadius = 0.05;
+    static kLength = 0.20;
+    static kDenseRadius = 0.01;
+    setGeometry() {
+        let ballGeometry = new THREE.IcosahedronBufferGeometry(Pika.kRadius, 3);
+        ballGeometry.scale(1, 1, Pika.kLength / (2 * Pika.kRadius));
+        ballGeometry.translate(0, -Pika.kRadius, 0);
+        ballGeometry = BufferGeometryUtils.mergeVertices(ballGeometry, 0.001);
+        ballGeometry.computeVertexNormals();
+        const ballMesh = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
+        ballMesh.castShadow = true;
+        ballMesh.receiveShadow = true;
+        this.add(ballMesh);
+    }
+    addToPhysics() {
+        const outerShell = new this.ammo.btSphereShape(Pika.kRadius);
+        outerShell.setLocalScaling(new this.ammo.btVector3(1, 1, Pika.kLength / (2 * Pika.kRadius)));
+        const innerShell = new this.ammo.btSphereShape(Pika.kDenseRadius);
+        const innerBody = this.makeRigidBody(innerShell, Pika.kDenseRadius, 0.107 /*g*/);
+        const outerBody = this.makeRigidBody(outerShell, Pika.kRadius, 0.001 /*g*/);
+        outerBody.setDamping(0.01, 5);
+        const constraint = new this.ammo.btFixedConstraint(innerBody, outerBody, innerBody.getWorldTransform(), outerBody.getWorldTransform());
+        this.physicsWorld.addConstraint(constraint, true);
+        this.physicsWorld.addRigidBody(innerBody);
+        this.physicsWorld.addRigidBody(outerBody);
+        this.userData['physicsObject'] = outerBody;
+    }
+    makeRigidBody(shape, radius, mass) {
+        const ammoTransform = new this.ammo.btTransform();
+        ammoTransform.setIdentity();
+        ammoTransform.setOrigin(new this.ammo.btVector3(this.position.x, this.position.y - radius, this.position.z));
+        const localInertia = new this.ammo.btVector3(0, 0, 0);
+        const motionState = new this.ammo.btDefaultMotionState(ammoTransform);
+        shape.calculateLocalInertia(mass, localInertia);
+        const body = new this.ammo.btRigidBody(new this.ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia));
+        body.setRestitution(0.8);
+        return body;
+    }
+}
+exports.Pika = Pika;
+//# sourceMappingURL=pika.js.map
 
 /***/ }),
 
