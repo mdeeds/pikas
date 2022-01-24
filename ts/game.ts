@@ -96,7 +96,7 @@ export class Game {
 
       this.physicsWorld.stepSimulation(deltaS, /*substeps=*/4);
       for (const p of this.pikas) {
-        p.updatePositionFromPhysics();
+        p.updatePositionFromPhysics(clock.elapsedTime);
       }
       this.renderer.render(this.scene, this.camera);
     })
