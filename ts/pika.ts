@@ -8,6 +8,8 @@ export class Pika extends THREE.Group {
   private btV3: Ammo.btVector3;
   private btTx: Ammo.btTransform;
   private btQ: Ammo.btQuaternion;
+  private v1 = new THREE.Vector3();
+  private v2 = new THREE.Vector3();
 
   constructor(position: THREE.Vector3, private ammo: typeof Ammo,
     private physicsWorld: Ammo.btDiscreteDynamicsWorld) {
@@ -37,32 +39,20 @@ export class Pika extends THREE.Group {
     const velocity = physicsObject.getLinearVelocity().length()
     if (velocity < 0.5) {
       // TODO: Also confirm that Pika is touching the ground.
-      const force = 0.2 * (Math.cos(elapsedS * 8) + 1);
-      const forward = new THREE.Vector3(0, force * 0.1, force);
-      forward.applyMatrix4(this.matrixWorld);
-      this.btV1.setValue(forward.x, forward.y, forward.z);
-      physicsObject.applyCentralForce(this.btV1);
+      const force = 0.5 * (Math.cos(elapsedS * 4 * Math.PI) + 1);
+      this.v1.set(0, force * 0.1, force);
+      this.v1.applyMatrix4(this.matrixWorld);
+      this.getWorldPosition(this.v2);
+      this.v1.sub(this.v2);
+      this.btV1.setValue(this.v1.x, this.v1.y, this.v1.z);
+      physicsObject.setLinearVelocity(this.btV1);
     }
-
-    const rotationalVelocity = physicsObject.getAngularVelocity();
-    rotationalVelocity.op_mul(0.5);
-    physicsObject.setAngularVelocity(rotationalVelocity);
-    // const pikaAngVelocity = new THREE.Vector3(
-    //   rotationalVelocity.x(), rotationalVelocity.y(), rotationalVelocity.z());
-
-    const worldUp = new THREE.Vector3(0, 1, 0);
-    const pikaUp = new THREE.Vector3(0, 1, 0);
-    pikaUp.applyMatrix4(this.matrixWorld);
-    pikaUp.cross(worldUp);
-    pikaUp.multiplyScalar(0.02);
-    this.btV1.setValue(pikaUp.x, pikaUp.y, pikaUp.z);
-    physicsObject.applyLocalTorque(this.btV1);
   }
 
   // Forward is in the positive Z direction.
   private static kRadius = 0.05;
   private static kLength = 0.20;
-  private static kDenseRadius = 0.03;
+  private static kDenseRadius = 0.005;
 
   private setGeometry() {
     {  // Body
@@ -93,32 +83,25 @@ export class Pika extends THREE.Group {
   }
 
   private addToPhysics() {
-    const outerShell = new this.ammo.btSphereShape(Pika.kRadius);
+    // Capsule
+    const capsule = new this.ammo.btCapsuleShapeZ(Pika.kRadius, Pika.kLength);
+    const outerShell = new this.ammo.btCompoundShape();
+    this.btTx.setIdentity();
+    this.btV1.setValue(0, Pika.kRadius, 0);
+    this.btTx.setOrigin(this.btV1);
+    outerShell.addChildShape(this.btTx, capsule);
 
-    this.btV1.setValue(1, 1, Pika.kLength / (2 * Pika.kRadius));
-    outerShell.setLocalScaling(this.btV1);
-    // const innerShell = new this.ammo.btSphereShape(Pika.kDenseRadius);
-    // const innerShell = new this.ammo.btBoxShape(new this.ammo.btVector3(
-    //   Pika.kDenseRadius, Pika.kDenseRadius, 2 * Pika.kDenseRadius));
-
-    // const innerBody =
-    //   this.makeRigidBody(innerShell, Pika.kDenseRadius, 0.100/*g*/,
-    //     -(Pika.kRadius - Pika.kDenseRadius), Pika.kDenseRadius);
+    outerShell.setMargin(0.01);
     const outerBody =
-      this.makeRigidBody(outerShell, Pika.kRadius, 0.050/*g*/, 0, 0);
-
-    // const constraint = new this.ammo.btFixedConstraint(innerBody, outerBody,
-    //   innerBody.getWorldTransform(), outerBody.getWorldTransform());
-
-    // this.physicsWorld.addConstraint(constraint, true);
-    // this.physicsWorld.addRigidBody(innerBody);
-
+      this.makeRigidBody(outerShell, 0.002/*kg*/, 0, 0);
+    outerBody.setFriction(0.9);
+    outerBody.setRestitution(0.1);
     this.physicsWorld.addRigidBody(outerBody);
 
     this.userData['physicsObject'] = outerBody;
   }
 
-  private makeRigidBody(shape: Ammo.btSphereShape, radius: number,
+  private makeRigidBody(shape: Ammo.btSphereShape | Ammo.btBvhTriangleMeshShape,
     mass: number, offsetY: number, offsetZ: number): Ammo.btRigidBody {
     this.btTx.setIdentity();
     this.btV1.setValue(

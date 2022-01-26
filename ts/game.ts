@@ -94,7 +94,7 @@ export class Game {
         this.addPika();
       }
 
-      this.physicsWorld.stepSimulation(deltaS, /*substeps=*/4);
+      this.physicsWorld.stepSimulation(deltaS, /*substeps=*/10);
       for (const p of this.pikas) {
         p.updatePositionFromPhysics(clock.elapsedTime);
       }
@@ -104,6 +104,7 @@ export class Game {
 
   private addPlane(normal: Ammo.btVector3, offset: number) {
     const shape = new this.ammo.btStaticPlaneShape(normal, offset)
+    shape.setMargin(0.01);
     const ammoTransform = new this.ammo.btTransform();
     ammoTransform.setIdentity();
     const mass = 0;  // Zero mass tells Ammo that this object does not move.
@@ -125,12 +126,11 @@ export class Game {
     this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
     this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
 
-
-    let floorGeometry = new THREE.BoxGeometry(5, 0.01, 1);
+    let floorGeometry = new THREE.BoxGeometry(10, 0.01, 1);
     let floorMesh = new THREE.Mesh(floorGeometry,
       new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
     floorMesh.receiveShadow = true;
-    floorMesh.position.set(0, -0.01, 0);
+    floorMesh.position.set(0, -0.03, 0);
     this.scene.add(floorMesh);
 
   }
