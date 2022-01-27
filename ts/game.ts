@@ -3,6 +3,7 @@ import Ammo from "ammojs-typed";
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { Pika } from "./pika";
 import { InstancedObject } from "./instancedObject";
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export class Game {
   public static kMaxPikas = 100;
@@ -17,15 +18,8 @@ export class Game {
 
   private constructor(private ammo: typeof Ammo) {
     this.renderer = new THREE.WebGLRenderer();
-
     this.scene = new THREE.Scene();
-    this.setUpMeshes();
-    this.setUpCamera();
-    this.setUpLight();
-    this.setUpPhysics();
-    this.setUpTank();
-    this.setUpRenderer();
-    this.setUpAnimation();
+    this.setUp();
   }
 
   static async make(): Promise<Game> {
@@ -36,9 +30,30 @@ export class Game {
     })
   }
 
-  private setUpMeshes() {
-    this.pikaMeshes = new InstancedObject(Pika.getObject3D(), Game.kMaxPikas);
-    this.scene.add(this.pikaMeshes);
+  private async setUp() {
+    await this.setUpMeshes();
+    this.setUpCamera();
+    this.setUpLight();
+    this.setUpPhysics();
+    this.setUpTank();
+    this.setUpRenderer();
+    this.setUpAnimation();
+  }
+
+  private async setUpMeshes(): Promise<void> {
+    console.log('A');
+    return new Promise((resolve) => {
+      console.log('B');
+      const loader = new GLTFLoader();
+      loader.load('models/pika.gltf', (gltf) => {
+        console.log('C');
+        this.pikaMeshes = new InstancedObject(gltf.scene, Game.kMaxPikas);
+        this.scene.add(this.pikaMeshes);
+        console.log('D');
+        resolve();
+      }
+      );
+    });
   }
 
   private setUpPhysics() {
