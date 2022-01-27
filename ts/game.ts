@@ -2,24 +2,28 @@ import * as THREE from "three";
 import Ammo from "ammojs-typed";
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { Pika } from "./pika";
+import { InstancedObject } from "./instancedObject";
 
 export class Game {
+  public static kMaxPikas = 100;
+
   private camera: THREE.Camera;
   private scene: THREE.Scene;
   private renderer: THREE.WebGLRenderer;
+  private clock: THREE.Clock;
   private physicsWorld: Ammo.btDiscreteDynamicsWorld;
   private pikas: Pika[] = [];
+  private pikaMeshes: InstancedObject;
 
   private constructor(private ammo: typeof Ammo) {
     this.renderer = new THREE.WebGLRenderer();
 
     this.scene = new THREE.Scene();
-
+    this.setUpMeshes();
     this.setUpCamera();
     this.setUpLight();
     this.setUpPhysics();
     this.setUpTank();
-
     this.setUpRenderer();
     this.setUpAnimation();
   }
@@ -30,6 +34,11 @@ export class Game {
         resolve(new Game(lib));
       });
     })
+  }
+
+  private setUpMeshes() {
+    this.pikaMeshes = new InstancedObject(Pika.getObject3D(), Game.kMaxPikas);
+    this.scene.add(this.pikaMeshes);
   }
 
   private setUpPhysics() {
@@ -80,26 +89,31 @@ export class Game {
 
   private addPika() {
     const pika = new Pika(new THREE.Vector3(
-      0.01 * (Math.random() - 0.5), 0.5, 0.01 * (Math.random() - 0.5)),
-      this.ammo, this.physicsWorld);
-    this.scene.add(pika);
+      0.01 * (Math.random() - 0.5), 0.75, 0.01 * (Math.random() - 0.5)),
+      this.ammo, this.physicsWorld, this.pikaMeshes);
     this.pikas.push(pika);
   }
 
-  private setUpAnimation() {
-    const clock = new THREE.Clock();
-    this.renderer.setAnimationLoop(() => {
-      const deltaS = clock.getDelta();
-      if (clock.elapsedTime > this.pikas.length && this.pikas.length < 100) {
-        this.addPika();
-      }
+  private animationLoop() {
+    const deltaS = this.clock.getDelta();
+    if (this.clock.elapsedTime > this.pikas.length &&
+      this.pikas.length < Game.kMaxPikas) {
+      this.addPika();
+    }
 
-      this.physicsWorld.stepSimulation(deltaS, /*substeps=*/10);
-      for (const p of this.pikas) {
-        p.updatePositionFromPhysics(clock.elapsedTime);
-      }
-      this.renderer.render(this.scene, this.camera);
-    })
+    this.physicsWorld.stepSimulation(deltaS, /*substeps=*/10);
+    for (const p of this.pikas) {
+      p.updatePositionFromPhysics(this.clock.elapsedTime);
+    }
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  private setUpAnimation() {
+    this.clock = new THREE.Clock();
+    this.renderer.setAnimationLoop(
+      (function (self: Game) {
+        return function () { self.animationLoop(); }
+      })(this));
   }
 
   private addPlane(normal: Ammo.btVector3, offset: number) {

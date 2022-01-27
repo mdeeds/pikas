@@ -34,17 +34,22 @@ const THREE = __importStar(__webpack_require__(578));
 const ammojs_typed_1 = __importDefault(__webpack_require__(736));
 const VRButton_js_1 = __webpack_require__(652);
 const pika_1 = __webpack_require__(443);
+const instancedObject_1 = __webpack_require__(62);
 class Game {
     ammo;
+    static kMaxPikas = 100;
     camera;
     scene;
     renderer;
+    clock;
     physicsWorld;
     pikas = [];
+    pikaMeshes;
     constructor(ammo) {
         this.ammo = ammo;
         this.renderer = new THREE.WebGLRenderer();
         this.scene = new THREE.Scene();
+        this.setUpMeshes();
         this.setUpCamera();
         this.setUpLight();
         this.setUpPhysics();
@@ -58,6 +63,10 @@ class Game {
                 resolve(new Game(lib));
             });
         });
+    }
+    setUpMeshes() {
+        this.pikaMeshes = new instancedObject_1.InstancedObject(pika_1.Pika.getObject3D(), Game.kMaxPikas);
+        this.scene.add(this.pikaMeshes);
     }
     setUpPhysics() {
         // Physics configuration
@@ -96,23 +105,26 @@ class Game {
         this.renderer.xr.enabled = true;
     }
     addPika() {
-        const pika = new pika_1.Pika(new THREE.Vector3(0.01 * (Math.random() - 0.5), 0.5, 0.01 * (Math.random() - 0.5)), this.ammo, this.physicsWorld);
-        this.scene.add(pika);
+        const pika = new pika_1.Pika(new THREE.Vector3(0.01 * (Math.random() - 0.5), 0.75, 0.01 * (Math.random() - 0.5)), this.ammo, this.physicsWorld, this.pikaMeshes);
         this.pikas.push(pika);
     }
+    animationLoop() {
+        const deltaS = this.clock.getDelta();
+        if (this.clock.elapsedTime > this.pikas.length &&
+            this.pikas.length < Game.kMaxPikas) {
+            this.addPika();
+        }
+        this.physicsWorld.stepSimulation(deltaS, /*substeps=*/ 10);
+        for (const p of this.pikas) {
+            p.updatePositionFromPhysics(this.clock.elapsedTime);
+        }
+        this.renderer.render(this.scene, this.camera);
+    }
     setUpAnimation() {
-        const clock = new THREE.Clock();
-        this.renderer.setAnimationLoop(() => {
-            const deltaS = clock.getDelta();
-            if (clock.elapsedTime > this.pikas.length && this.pikas.length < 100) {
-                this.addPika();
-            }
-            this.physicsWorld.stepSimulation(deltaS, /*substeps=*/ 10);
-            for (const p of this.pikas) {
-                p.updatePositionFromPhysics(clock.elapsedTime);
-            }
-            this.renderer.render(this.scene, this.camera);
-        });
+        this.clock = new THREE.Clock();
+        this.renderer.setAnimationLoop((function (self) {
+            return function () { self.animationLoop(); };
+        })(this));
     }
     addPlane(normal, offset) {
         const shape = new this.ammo.btStaticPlaneShape(normal, offset);
@@ -146,6 +158,83 @@ exports.Game = Game;
 
 /***/ }),
 
+/***/ 62:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.InstancedObject = void 0;
+const THREE = __importStar(__webpack_require__(578));
+class InstancedObject extends THREE.Object3D {
+    maxInstanceCount;
+    meshes = [];
+    instanceCount = 0;
+    constructor(source, maxInstanceCount) {
+        super();
+        this.maxInstanceCount = maxInstanceCount;
+        this.buildInstancedMeshes(source);
+    }
+    buildInstancedMeshes(source) {
+        if (source instanceof THREE.Mesh) {
+            this.addMesh(source);
+        }
+        else {
+            for (const child of source.children) {
+                this.buildInstancedMeshes(child);
+            }
+        }
+    }
+    addMesh(mesh) {
+        mesh.updateWorldMatrix(false, false);
+        const matrix = new THREE.Matrix4();
+        matrix.copy(mesh.matrixWorld);
+        const instanced = new THREE.InstancedMesh(mesh.geometry, mesh.material, this.maxInstanceCount);
+        this.meshes.push(instanced);
+        this.add(instanced);
+    }
+    addInstance(matrix) {
+        if (this.instanceCount >= this.maxInstanceCount) {
+            throw new Error("Too many instances!");
+        }
+        for (const m of this.meshes) {
+            m.setMatrixAt(this.instanceCount, matrix);
+            m.instanceMatrix.needsUpdate = true;
+        }
+        ++this.instanceCount;
+        return (this.instanceCount - 1);
+    }
+    setMatrixAt(i, matrix) {
+        for (const m of this.meshes) {
+            m.setMatrixAt(i, matrix);
+            m.instanceMatrix.needsUpdate = true;
+        }
+    }
+}
+exports.InstancedObject = InstancedObject;
+//# sourceMappingURL=instancedObject.js.map
+
+/***/ }),
+
 /***/ 443:
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
@@ -174,9 +263,10 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Pika = void 0;
 const THREE = __importStar(__webpack_require__(578));
 const BufferGeometryUtils = __importStar(__webpack_require__(58));
-class Pika extends THREE.Group {
+class Pika {
     ammo;
     physicsWorld;
+    instanced;
     btV1;
     btV2;
     btV3;
@@ -184,47 +274,53 @@ class Pika extends THREE.Group {
     btQ;
     v1 = new THREE.Vector3();
     v2 = new THREE.Vector3();
-    constructor(position, ammo, physicsWorld) {
-        super();
+    physicsObject;
+    dummy = new THREE.Object3D();
+    instanceId;
+    constructor(position, ammo, physicsWorld, instanced) {
         this.ammo = ammo;
         this.physicsWorld = physicsWorld;
+        this.instanced = instanced;
         this.btV1 = new this.ammo.btVector3();
         this.btV2 = new this.ammo.btVector3();
         this.btV3 = new this.ammo.btVector3();
         this.btTx = new this.ammo.btTransform();
         this.btQ = new this.ammo.btQuaternion(1, 0, 0, 0);
-        this.position.copy(position);
-        this.rotateY(Math.PI / 2);
-        this.setGeometry();
+        this.dummy.position.copy(position);
+        this.dummy.rotateY(Math.PI / 2);
+        this.dummy.updateMatrix();
+        // this.dummy.updateMatrixWorld();
         this.addToPhysics();
+        this.instanceId = this.instanced.addInstance(this.dummy.matrix);
     }
     updatePositionFromPhysics(elapsedS) {
-        const physicsObject = this.userData['physicsObject'];
         // Set position and rotation to match Physics.
-        const worldTransform = physicsObject.getWorldTransform();
+        const worldTransform = this.physicsObject.getWorldTransform();
         const position = worldTransform.getOrigin();
-        this.position.set(position.x(), position.y(), position.z());
+        this.dummy.position.set(position.x(), position.y(), position.z());
         const rotation = worldTransform.getRotation();
-        this.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
-        this.updateMatrixWorld();
+        this.dummy.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+        this.dummy.updateMatrixWorld();
+        this.instanced.setMatrixAt(this.instanceId, this.dummy.matrix);
         // Apply force if neccessary (i.e. walking)
-        const velocity = physicsObject.getLinearVelocity().length();
+        const velocity = this.physicsObject.getLinearVelocity().length();
         if (velocity < 0.5) {
             // TODO: Also confirm that Pika is touching the ground.
             const force = 0.5 * (Math.cos(elapsedS * 4 * Math.PI) + 1);
             this.v1.set(0, force * 0.1, force);
-            this.v1.applyMatrix4(this.matrixWorld);
-            this.getWorldPosition(this.v2);
+            this.v1.applyMatrix4(this.dummy.matrixWorld);
+            this.dummy.getWorldPosition(this.v2);
             this.v1.sub(this.v2);
             this.btV1.setValue(this.v1.x, this.v1.y, this.v1.z);
-            physicsObject.setLinearVelocity(this.btV1);
+            this.physicsObject.setLinearVelocity(this.btV1);
         }
     }
     // Forward is in the positive Z direction.
     static kRadius = 0.05;
     static kLength = 0.20;
     static kDenseRadius = 0.005;
-    setGeometry() {
+    static getObject3D() {
+        const group = new THREE.Group();
         { // Body
             let ballGeometry = new THREE.IcosahedronBufferGeometry(Pika.kRadius, 3);
             ballGeometry.scale(1, 1, Pika.kLength / (2 * Pika.kRadius));
@@ -234,7 +330,7 @@ class Pika extends THREE.Group {
             const ballMesh = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
             ballMesh.castShadow = true;
             ballMesh.receiveShadow = true;
-            this.add(ballMesh);
+            group.add(ballMesh);
         }
         { // Head
             let ballGeometry = new THREE.IcosahedronBufferGeometry(Pika.kRadius, 3);
@@ -244,8 +340,9 @@ class Pika extends THREE.Group {
             const ballMesh = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
             ballMesh.castShadow = true;
             ballMesh.receiveShadow = true;
-            this.add(ballMesh);
+            group.add(ballMesh);
         }
+        return group;
     }
     addToPhysics() {
         // Capsule
@@ -260,13 +357,13 @@ class Pika extends THREE.Group {
         outerBody.setFriction(0.9);
         outerBody.setRestitution(0.1);
         this.physicsWorld.addRigidBody(outerBody);
-        this.userData['physicsObject'] = outerBody;
+        this.physicsObject = outerBody;
     }
     makeRigidBody(shape, mass, offsetY, offsetZ) {
         this.btTx.setIdentity();
-        this.btV1.setValue(this.position.x, this.position.y + offsetY, this.position.z + offsetZ);
+        this.btV1.setValue(this.dummy.position.x, this.dummy.position.y + offsetY, this.dummy.position.z + offsetZ);
         this.btTx.setOrigin(this.btV1);
-        this.btQ.setValue(this.quaternion.x, this.quaternion.y, this.quaternion.z, this.quaternion.w);
+        this.btQ.setValue(this.dummy.quaternion.x, this.dummy.quaternion.y, this.dummy.quaternion.z, this.dummy.quaternion.w);
         this.btTx.setRotation(this.btQ);
         const motionState = new this.ammo.btDefaultMotionState(this.btTx);
         this.btV1.setValue(0, 0, 0);
