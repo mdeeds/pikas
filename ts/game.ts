@@ -8,7 +8,7 @@ import { Flock } from "./flock";
 
 export class Game {
   public static kMaxPikas = 100;
-
+  private dolly: THREE.Group;
   private camera: THREE.Camera;
   private scene: THREE.Scene;
   private renderer: THREE.WebGLRenderer;
@@ -17,6 +17,7 @@ export class Game {
   private pikas: Pika[] = [];
   private flock = new Flock();
   private pikaMeshes: InstancedObject;
+  private keysDown = new Set<string>();
 
   private constructor(private ammo: typeof Ammo) {
     this.renderer = new THREE.WebGLRenderer();
@@ -40,6 +41,7 @@ export class Game {
     this.setUpTank();
     this.setUpRenderer();
     this.setUpAnimation();
+    this.setUpKeyboard();
   }
 
   private async setUpMeshes(): Promise<void> {
@@ -69,12 +71,15 @@ export class Game {
   }
 
   private setUpCamera() {
+    this.dolly = new THREE.Group();
+    this.dolly.position.set(0, 0, 3);
     this.camera = new THREE.PerspectiveCamera(
       75, window.innerWidth / window.innerHeight, /*near=*/0.1,
       /*far=*/100);
-    this.camera.position.set(0, 1.7, 3);
+    this.camera.position.set(0, 1.7, 0);
+    this.dolly.add(this.camera);
+    this.scene.add(this.dolly);
     this.camera.lookAt(0, 0, 0);
-    this.scene.add(this.camera);
   }
 
   private setUpLight() {
@@ -108,6 +113,7 @@ export class Game {
     this.flock.add(pika);
   }
 
+  private v1 = new THREE.Vector3();
   private animationLoop() {
     const deltaS = this.clock.getDelta();
     if (this.clock.elapsedTime > this.pikas.length &&
@@ -120,6 +126,14 @@ export class Game {
       p.updatePositionFromPhysics(this.clock.elapsedTime);
     }
     this.flock.update();
+    this.v1.set(0, 0, 0);
+    if (this.keysDown.has('ArrowRight')) {
+      this.v1.x += deltaS * 1.5;
+    }
+    if (this.keysDown.has('ArrowLeft')) {
+      this.v1.x -= deltaS * 1.5;
+    }
+    this.dolly.position.add(this.v1);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -130,6 +144,12 @@ export class Game {
       (function (self: Game) {
         return function () { self.animationLoop(); }
       })(this));
+  }
+
+  private setUpKeyboard() {
+    const body = document.querySelector('body');
+    body.addEventListener('keydown', (ev) => { this.keysDown.add(ev.code); });
+    body.addEventListener('keyup', (ev) => { this.keysDown.delete(ev.code); });
   }
 
   private addPlane(normal: Ammo.btVector3, offset: number) {
