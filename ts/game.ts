@@ -41,15 +41,11 @@ export class Game {
   }
 
   private async setUpMeshes(): Promise<void> {
-    console.log('A');
     return new Promise((resolve) => {
-      console.log('B');
       const loader = new GLTFLoader();
       loader.load('models/pika.gltf', (gltf) => {
-        console.log('C');
         this.pikaMeshes = new InstancedObject(gltf.scene, Game.kMaxPikas);
         this.scene.add(this.pikaMeshes);
-        console.log('D');
         resolve();
       }
       );

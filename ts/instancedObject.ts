@@ -23,7 +23,6 @@ export class InstancedObject extends THREE.Object3D {
     const matrix = new THREE.Matrix4();
     mesh.updateMatrix();
     matrix.copy(mesh.matrix);
-    console.log(`Matrix: ${matrix.toArray()}`);
     let o = mesh.parent;
     while (o) {
       console.log(o.name);
@@ -31,7 +30,6 @@ export class InstancedObject extends THREE.Object3D {
       matrix.premultiply(o.matrix);
       o = o.parent;
     }
-    console.log(`Matrix: ${matrix.toArray()}`);
     mesh.geometry.applyMatrix4(matrix);
     const instanced = new THREE.InstancedMesh(
       mesh.geometry, mesh.material, this.maxInstanceCount);
