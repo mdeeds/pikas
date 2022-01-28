@@ -32,6 +32,7 @@ class Boid {
     pika;
     tip = new THREE.Vector3();
     tail = new THREE.Vector3();
+    heading = new THREE.Vector3();
     constructor(pika) {
         this.pika = pika;
         this.setTipAndTail();
@@ -41,12 +42,16 @@ class Boid {
         this.tip.applyMatrix4(this.pika.getMatrix());
         this.tail.set(0, 0, -Flock.kRadius);
         this.tail.applyMatrix4(this.pika.getMatrix());
+        this.heading.copy(this.tip);
+        this.heading.sub(this.tail);
+        this.heading.normalize();
     }
 }
 class Flock {
-    static kRadius = 0.2;
-    static kSearchRadius = 1.0;
-    static kCohesion = 2;
+    static kRadius = 0.4;
+    static kSearchRadius = 2.0;
+    static kCohesion = 0.05;
+    static kAlignment = 0.2;
     boids = [];
     constructor() { }
     add(o) {
@@ -80,11 +85,19 @@ class Flock {
                 f.sub(o); // f is now the "forward" vector
                 f.cross(d); // f is now the vector to rotate around
                 // Scale cohesion inversely with distance.
-                f.multiplyScalar(1 / (distance + 0.05));
+                f.setLength((distance - Flock.kRadius) * (distance - Flock.kSearchRadius));
+                f.multiplyScalar(Flock.kCohesion);
                 totalRotation.add(f);
+                // Alignment
+                if (distance * 2 > Flock.kRadius) {
+                    d.copy(current.heading);
+                    d.cross(other.heading);
+                    d.multiplyScalar(1 / (distance + 0.05));
+                    d.multiplyScalar(Flock.kAlignment);
+                    totalRotation.add(f);
+                }
             }
-            totalRotation.multiplyScalar(Flock.kCohesion);
-            current.pika.rotateAround(totalRotation);
+            // current.pika.setTorque(totalRotation);
         }
     }
 }
@@ -132,6 +145,7 @@ const flock_1 = __webpack_require__(755);
 class Game {
     ammo;
     static kMaxPikas = 100;
+    dolly;
     camera;
     scene;
     renderer;
@@ -140,6 +154,7 @@ class Game {
     pikas = [];
     flock = new flock_1.Flock();
     pikaMeshes;
+    keysDown = new Set();
     constructor(ammo) {
         this.ammo = ammo;
         this.renderer = new THREE.WebGLRenderer();
@@ -161,6 +176,7 @@ class Game {
         this.setUpTank();
         this.setUpRenderer();
         this.setUpAnimation();
+        this.setUpKeyboard();
     }
     async setUpMeshes() {
         return new Promise((resolve) => {
@@ -182,11 +198,14 @@ class Game {
         this.physicsWorld.setGravity(new this.ammo.btVector3(0, -9.8, 0));
     }
     setUpCamera() {
+        this.dolly = new THREE.Group();
+        this.dolly.position.set(0, 0, 3);
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, /*near=*/ 0.1, 
         /*far=*/ 100);
-        this.camera.position.set(0, 1.7, 3);
+        this.camera.position.set(0, 1.7, 0);
+        this.dolly.add(this.camera);
+        this.scene.add(this.dolly);
         this.camera.lookAt(0, 0, 0);
-        this.scene.add(this.camera);
     }
     setUpLight() {
         const light = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -213,6 +232,7 @@ class Game {
         this.pikas.push(pika);
         this.flock.add(pika);
     }
+    v1 = new THREE.Vector3();
     animationLoop() {
         const deltaS = this.clock.getDelta();
         if (this.clock.elapsedTime > this.pikas.length &&
@@ -224,6 +244,14 @@ class Game {
             p.updatePositionFromPhysics(this.clock.elapsedTime);
         }
         this.flock.update();
+        this.v1.set(0, 0, 0);
+        if (this.keysDown.has('ArrowRight')) {
+            this.v1.x += deltaS * 1.5;
+        }
+        if (this.keysDown.has('ArrowLeft')) {
+            this.v1.x -= deltaS * 1.5;
+        }
+        this.dolly.position.add(this.v1);
         this.renderer.render(this.scene, this.camera);
     }
     setUpAnimation() {
@@ -231,6 +259,11 @@ class Game {
         this.renderer.setAnimationLoop((function (self) {
             return function () { self.animationLoop(); };
         })(this));
+    }
+    setUpKeyboard() {
+        const body = document.querySelector('body');
+        body.addEventListener('keydown', (ev) => { this.keysDown.add(ev.code); });
+        body.addEventListener('keyup', (ev) => { this.keysDown.delete(ev.code); });
     }
     addPlane(normal, offset) {
         const shape = new this.ammo.btStaticPlaneShape(normal, offset);
@@ -252,7 +285,7 @@ class Game {
         this.addPlane(new this.ammo.btVector3(1, 0, 0), -10);
         this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
         this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
-        let floorGeometry = new THREE.BoxGeometry(10, 0.01, 1);
+        let floorGeometry = new THREE.BoxGeometry(20, 0.01, 1);
         let floorMesh = new THREE.Mesh(floorGeometry, new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
         floorMesh.receiveShadow = true;
         floorMesh.position.set(0, -0.03, 0);
@@ -413,13 +446,10 @@ class Pika {
     }
     // rotation is a vector in the direction of the axis of rotation.
     // Length of the vector is the rate of rotation in radians per second.
-    rotateAround(rotation) {
+    setTorque(rotation) {
         this.btV1.setValue(rotation.x, rotation.y, rotation.z);
-        // Does this leak???
-        const oldRot = this.physicsObject.getAngularVelocity();
-        oldRot.op_add(this.btV1);
-        oldRot.op_mul(0.5);
-        this.physicsObject.setAngularVelocity(oldRot);
+        this.btV1.op_mul(0.003);
+        this.physicsObject.applyTorque(this.btV1);
     }
     updatePositionFromPhysics(elapsedS) {
         // Set position and rotation to match Physics.
@@ -438,7 +468,8 @@ class Pika {
             this.dummy.getWorldPosition(this.v2);
             this.v1.sub(this.v2);
             this.btV1.setValue(this.v1.x, this.v1.y, this.v1.z);
-            this.physicsObject.setLinearVelocity(this.btV1);
+            this.btV1.op_mul(0.02);
+            this.physicsObject.applyCentralForce(this.btV1);
         }
     }
     // Forward is in the positive Z direction.

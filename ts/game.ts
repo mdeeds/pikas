@@ -176,7 +176,7 @@ export class Game {
     this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
     this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
 
-    let floorGeometry = new THREE.BoxGeometry(10, 0.01, 1);
+    let floorGeometry = new THREE.BoxGeometry(20, 0.01, 1);
     let floorMesh = new THREE.Mesh(floorGeometry,
       new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
     floorMesh.receiveShadow = true;
