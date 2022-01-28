@@ -87,14 +87,19 @@ export class Game {
     light.castShadow = true;
     light.shadow.mapSize.width = 1024;
     light.shadow.mapSize.height = 1024;
-    light.shadow.camera.near = 50;
-    light.shadow.camera.far = 120;
+    light.shadow.camera.near = 5;
+    light.shadow.camera.far = 1000;
     light.position.set(50, 100, 0);
     light.target.position.set(0, 0, 0);
     this.scene.add(light);
 
-    const ambient = new THREE.AmbientLight(0xddddff, 0.2);
-    this.scene.add(ambient);
+    // const ambient = new THREE.AmbientLight(0xddddff, 0.2);
+    // this.scene.add(ambient);
+
+    const hemi = new THREE.HemisphereLight(0x99ddff, 0xffbb99, 0.5);
+    this.scene.add(hemi);
+
+    this.scene.background = new THREE.Color(0x99ddff);
   }
 
   private setUpRenderer() {
@@ -107,7 +112,7 @@ export class Game {
 
   private addPika() {
     const pika = new Pika(new THREE.Vector3(
-      0.01 * (Math.random() - 0.5), 0.75, 0.01 * (Math.random() - 0.5)),
+      -9.5, 0.75, 0.01 * (Math.random() - 0.5)),
       this.ammo, this.physicsWorld, this.pikaMeshes);
     this.pikas.push(pika);
     this.flock.add(pika);
