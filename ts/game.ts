@@ -4,6 +4,7 @@ import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { Pika } from "./pika";
 import { InstancedObject } from "./instancedObject";
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { Flock } from "./flock";
 
 export class Game {
   public static kMaxPikas = 100;
@@ -14,6 +15,7 @@ export class Game {
   private clock: THREE.Clock;
   private physicsWorld: Ammo.btDiscreteDynamicsWorld;
   private pikas: Pika[] = [];
+  private flock = new Flock();
   private pikaMeshes: InstancedObject;
 
   private constructor(private ammo: typeof Ammo) {
@@ -103,6 +105,7 @@ export class Game {
       0.01 * (Math.random() - 0.5), 0.75, 0.01 * (Math.random() - 0.5)),
       this.ammo, this.physicsWorld, this.pikaMeshes);
     this.pikas.push(pika);
+    this.flock.add(pika);
   }
 
   private animationLoop() {
@@ -116,6 +119,8 @@ export class Game {
     for (const p of this.pikas) {
       p.updatePositionFromPhysics(this.clock.elapsedTime);
     }
+    this.flock.update();
+
     this.renderer.render(this.scene, this.camera);
   }
 

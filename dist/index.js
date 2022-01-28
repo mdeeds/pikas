@@ -1,6 +1,98 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
+/***/ 755:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Flock = void 0;
+const THREE = __importStar(__webpack_require__(578));
+class Boid {
+    pika;
+    tip = new THREE.Vector3();
+    tail = new THREE.Vector3();
+    constructor(pika) {
+        this.pika = pika;
+        this.setTipAndTail();
+    }
+    setTipAndTail() {
+        this.tip.set(0, 0, Flock.kRadius);
+        this.tip.applyMatrix4(this.pika.getMatrix());
+        this.tail.set(0, 0, -Flock.kRadius);
+        this.tail.applyMatrix4(this.pika.getMatrix());
+    }
+}
+class Flock {
+    static kRadius = 0.2;
+    static kSearchRadius = 1.0;
+    static kCohesion = 2;
+    boids = [];
+    constructor() { }
+    add(o) {
+        this.boids.push(new Boid(o));
+    }
+    update() {
+        const d = new THREE.Vector3();
+        const f = new THREE.Vector3();
+        const o = new THREE.Vector3();
+        for (const b of this.boids) {
+            b.setTipAndTail();
+        }
+        for (const current of this.boids) {
+            const totalRotation = new THREE.Vector3(0, 0, 0);
+            for (const other of this.boids) {
+                if (other === current) {
+                    continue;
+                }
+                d.copy(other.tail);
+                d.sub(current.tip);
+                const distance = d.length();
+                if (distance > Flock.kSearchRadius) {
+                    continue;
+                }
+                // Steer toward tail
+                d.normalize(); // d is now pointing at the tail
+                f.set(0, 0, 1);
+                f.applyMatrix4(current.pika.getMatrix());
+                o.set(0, 0, 0);
+                o.applyMatrix4(current.pika.getMatrix());
+                f.sub(o); // f is now the "forward" vector
+                f.cross(d); // f is now the vector to rotate around
+                // Scale cohesion inversely with distance.
+                f.multiplyScalar(1 / (distance + 0.05));
+                totalRotation.add(f);
+            }
+            totalRotation.multiplyScalar(Flock.kCohesion);
+            current.pika.rotateAround(totalRotation);
+        }
+    }
+}
+exports.Flock = Flock;
+//# sourceMappingURL=flock.js.map
+
+/***/ }),
+
 /***/ 417:
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
@@ -36,6 +128,7 @@ const VRButton_js_1 = __webpack_require__(652);
 const pika_1 = __webpack_require__(443);
 const instancedObject_1 = __webpack_require__(62);
 const GLTFLoader_js_1 = __webpack_require__(687);
+const flock_1 = __webpack_require__(755);
 class Game {
     ammo;
     static kMaxPikas = 100;
@@ -45,6 +138,7 @@ class Game {
     clock;
     physicsWorld;
     pikas = [];
+    flock = new flock_1.Flock();
     pikaMeshes;
     constructor(ammo) {
         this.ammo = ammo;
@@ -69,15 +163,11 @@ class Game {
         this.setUpAnimation();
     }
     async setUpMeshes() {
-        console.log('A');
         return new Promise((resolve) => {
-            console.log('B');
             const loader = new GLTFLoader_js_1.GLTFLoader();
             loader.load('models/pika.gltf', (gltf) => {
-                console.log('C');
                 this.pikaMeshes = new instancedObject_1.InstancedObject(gltf.scene, Game.kMaxPikas);
                 this.scene.add(this.pikaMeshes);
-                console.log('D');
                 resolve();
             });
         });
@@ -121,6 +211,7 @@ class Game {
     addPika() {
         const pika = new pika_1.Pika(new THREE.Vector3(0.01 * (Math.random() - 0.5), 0.75, 0.01 * (Math.random() - 0.5)), this.ammo, this.physicsWorld, this.pikaMeshes);
         this.pikas.push(pika);
+        this.flock.add(pika);
     }
     animationLoop() {
         const deltaS = this.clock.getDelta();
@@ -132,6 +223,7 @@ class Game {
         for (const p of this.pikas) {
             p.updatePositionFromPhysics(this.clock.elapsedTime);
         }
+        this.flock.update();
         this.renderer.render(this.scene, this.camera);
     }
     setUpAnimation() {
@@ -222,7 +314,6 @@ class InstancedObject extends THREE.Object3D {
         const matrix = new THREE.Matrix4();
         mesh.updateMatrix();
         matrix.copy(mesh.matrix);
-        console.log(`Matrix: ${matrix.toArray()}`);
         let o = mesh.parent;
         while (o) {
             console.log(o.name);
@@ -230,7 +321,6 @@ class InstancedObject extends THREE.Object3D {
             matrix.premultiply(o.matrix);
             o = o.parent;
         }
-        console.log(`Matrix: ${matrix.toArray()}`);
         mesh.geometry.applyMatrix4(matrix);
         const instanced = new THREE.InstancedMesh(mesh.geometry, mesh.material, this.maxInstanceCount);
         this.meshes.push(instanced);
@@ -317,6 +407,20 @@ class Pika {
         this.addToPhysics();
         this.instanceId = this.instanced.addInstance(this.dummy.matrix);
     }
+    getMatrix() {
+        this.dummy.updateMatrixWorld();
+        return this.dummy.matrixWorld;
+    }
+    // rotation is a vector in the direction of the axis of rotation.
+    // Length of the vector is the rate of rotation in radians per second.
+    rotateAround(rotation) {
+        this.btV1.setValue(rotation.x, rotation.y, rotation.z);
+        // Does this leak???
+        const oldRot = this.physicsObject.getAngularVelocity();
+        oldRot.op_add(this.btV1);
+        oldRot.op_mul(0.5);
+        this.physicsObject.setAngularVelocity(oldRot);
+    }
     updatePositionFromPhysics(elapsedS) {
         // Set position and rotation to match Physics.
         const worldTransform = this.physicsObject.getWorldTransform();
@@ -326,11 +430,9 @@ class Pika {
         this.dummy.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
         this.dummy.updateMatrixWorld();
         this.instanced.setMatrixAt(this.instanceId, this.dummy.matrix);
-        // Apply force if neccessary (i.e. walking)
-        const velocity = this.physicsObject.getLinearVelocity().length();
-        if (velocity < 0.5) {
-            // TODO: Also confirm that Pika is touching the ground.
-            const force = 0.5 * (Math.cos(elapsedS * 4 * Math.PI) + 1);
+        // TODO: Also confirm that Pika is touching the ground.
+        const force = 1.2 * Math.cos(elapsedS * 4 * Math.PI);
+        if (force > 0) {
             this.v1.set(0, force * 0.1, force);
             this.v1.applyMatrix4(this.dummy.matrixWorld);
             this.dummy.getWorldPosition(this.v2);
@@ -342,7 +444,6 @@ class Pika {
     // Forward is in the positive Z direction.
     static kRadius = 0.05;
     static kLength = 0.20;
-    static kDenseRadius = 0.005;
     static getObject3D() {
         const group = new THREE.Group();
         { // Body

@@ -32,6 +32,22 @@ export class Pika {
     this.instanceId = this.instanced.addInstance(this.dummy.matrix);
   }
 
+  public getMatrix(): THREE.Matrix4 {
+    this.dummy.updateMatrixWorld();
+    return this.dummy.matrixWorld;
+  }
+
+  // rotation is a vector in the direction of the axis of rotation.
+  // Length of the vector is the rate of rotation in radians per second.
+  public rotateAround(rotation: THREE.Vector3) {
+    this.btV1.setValue(rotation.x, rotation.y, rotation.z);
+    // Does this leak???
+    const oldRot = this.physicsObject.getAngularVelocity();
+    oldRot.op_add(this.btV1);
+    oldRot.op_mul(0.5);
+    this.physicsObject.setAngularVelocity(oldRot);
+  }
+
   public updatePositionFromPhysics(elapsedS: number) {
     // Set position and rotation to match Physics.
     const worldTransform = this.physicsObject.getWorldTransform();
@@ -42,11 +58,9 @@ export class Pika {
     this.dummy.updateMatrixWorld();
     this.instanced.setMatrixAt(this.instanceId, this.dummy.matrix);
 
-    // Apply force if neccessary (i.e. walking)
-    const velocity = this.physicsObject.getLinearVelocity().length()
-    if (velocity < 0.5) {
-      // TODO: Also confirm that Pika is touching the ground.
-      const force = 0.5 * (Math.cos(elapsedS * 4 * Math.PI) + 1);
+    // TODO: Also confirm that Pika is touching the ground.
+    const force = 1.2 * Math.cos(elapsedS * 4 * Math.PI);
+    if (force > 0) {
       this.v1.set(0, force * 0.1, force);
       this.v1.applyMatrix4(this.dummy.matrixWorld);
       this.dummy.getWorldPosition(this.v2);
@@ -59,7 +73,6 @@ export class Pika {
   // Forward is in the positive Z direction.
   private static kRadius = 0.05;
   private static kLength = 0.20;
-  private static kDenseRadius = 0.005;
 
   public static getObject3D(): THREE.Object3D {
     const group = new THREE.Group();
