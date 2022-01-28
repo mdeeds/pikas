@@ -4,6 +4,7 @@ import { Pika } from "./pika";
 class Boid {
   readonly tip = new THREE.Vector3();
   readonly tail = new THREE.Vector3();
+  readonly heading = new THREE.Vector3();
   constructor(public pika: Pika) {
     this.setTipAndTail();
   }
@@ -12,14 +13,18 @@ class Boid {
     this.tip.applyMatrix4(this.pika.getMatrix());
     this.tail.set(0, 0, -Flock.kRadius);
     this.tail.applyMatrix4(this.pika.getMatrix());
+    this.heading.copy(this.tip);
+    this.heading.sub(this.tail);
+    this.heading.normalize();
   }
 }
 
 export class Flock {
-  static kRadius = 0.2;
-  static kSearchRadius = 1.0;
+  static kRadius = 0.4;
+  static kSearchRadius = 2.0;
 
-  static kCohesion = 2;
+  static kCohesion = 0.05;
+  static kAlignment = 0.2;
 
   private boids: Boid[] = [];
 
@@ -57,11 +62,21 @@ export class Flock {
         f.sub(o);  // f is now the "forward" vector
         f.cross(d); // f is now the vector to rotate around
         // Scale cohesion inversely with distance.
-        f.multiplyScalar(1 / (distance + 0.05));
+
+        f.setLength((distance - Flock.kRadius) * (distance - Flock.kSearchRadius));
+        f.multiplyScalar(Flock.kCohesion);
         totalRotation.add(f);
+
+        // Alignment
+        if (distance * 2 > Flock.kRadius) {
+          d.copy(current.heading);
+          d.cross(other.heading);
+          d.multiplyScalar(1 / (distance + 0.05));
+          d.multiplyScalar(Flock.kAlignment);
+          totalRotation.add(f);
+        }
       }
-      totalRotation.multiplyScalar(Flock.kCohesion);
-      current.pika.rotateAround(totalRotation);
+      // current.pika.setTorque(totalRotation);
     }
   }
 }

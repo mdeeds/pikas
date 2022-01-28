@@ -39,13 +39,10 @@ export class Pika {
 
   // rotation is a vector in the direction of the axis of rotation.
   // Length of the vector is the rate of rotation in radians per second.
-  public rotateAround(rotation: THREE.Vector3) {
+  public setTorque(rotation: THREE.Vector3) {
     this.btV1.setValue(rotation.x, rotation.y, rotation.z);
-    // Does this leak???
-    const oldRot = this.physicsObject.getAngularVelocity();
-    oldRot.op_add(this.btV1);
-    oldRot.op_mul(0.5);
-    this.physicsObject.setAngularVelocity(oldRot);
+    this.btV1.op_mul(0.003);
+    this.physicsObject.applyTorque(this.btV1);
   }
 
   public updatePositionFromPhysics(elapsedS: number) {
@@ -66,7 +63,8 @@ export class Pika {
       this.dummy.getWorldPosition(this.v2);
       this.v1.sub(this.v2);
       this.btV1.setValue(this.v1.x, this.v1.y, this.v1.z);
-      this.physicsObject.setLinearVelocity(this.btV1);
+      this.btV1.op_mul(0.02);
+      this.physicsObject.applyCentralForce(this.btV1);
     }
   }
 
