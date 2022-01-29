@@ -72,36 +72,6 @@ export class Pika {
   private static kRadius = 0.05;
   private static kLength = 0.20;
 
-  public static getObject3D(): THREE.Object3D {
-    const group = new THREE.Group();
-    {  // Body
-      let ballGeometry: THREE.BufferGeometry =
-        new THREE.IcosahedronBufferGeometry(Pika.kRadius, 3);
-      ballGeometry.scale(1, 1, Pika.kLength / (2 * Pika.kRadius));
-      ballGeometry.translate(0, 0, 0);
-      ballGeometry = BufferGeometryUtils.mergeVertices(ballGeometry, 0.001);
-      ballGeometry.computeVertexNormals();
-      const ballMesh = new THREE.Mesh(ballGeometry,
-        new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
-      ballMesh.castShadow = true;
-      ballMesh.receiveShadow = true;
-      group.add(ballMesh);
-    }
-    {  // Head
-      let ballGeometry: THREE.BufferGeometry =
-        new THREE.IcosahedronBufferGeometry(Pika.kRadius, 3);
-      ballGeometry.translate(0, Pika.kRadius / 2, Pika.kLength / 2);
-      ballGeometry = BufferGeometryUtils.mergeVertices(ballGeometry, 0.001);
-      ballGeometry.computeVertexNormals();
-      const ballMesh = new THREE.Mesh(ballGeometry,
-        new THREE.MeshStandardMaterial({ color: 0xffdd33, roughness: 0.5 }));
-      ballMesh.castShadow = true;
-      ballMesh.receiveShadow = true;
-      group.add(ballMesh);
-    }
-    return group;
-  }
-
   private addToPhysics() {
     // Capsule
     const capsule = new this.ammo.btCapsuleShapeZ(Pika.kRadius, Pika.kLength);

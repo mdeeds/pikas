@@ -3,8 +3,9 @@ import Ammo from "ammojs-typed";
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { Pika } from "./pika";
 import { InstancedObject } from "./instancedObject";
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Flock } from "./flock";
+import { Level } from "./level";
+import { Assets } from "./assets";
 
 export class Game {
   public static kMaxPikas = 100;
@@ -38,22 +39,16 @@ export class Game {
     this.setUpCamera();
     this.setUpLight();
     this.setUpPhysics();
-    this.setUpTank();
+    await this.setUpTank();
     this.setUpRenderer();
     this.setUpAnimation();
     this.setUpKeyboard();
   }
 
   private async setUpMeshes(): Promise<void> {
-    return new Promise((resolve) => {
-      const loader = new GLTFLoader();
-      loader.load('models/pika.gltf', (gltf) => {
-        this.pikaMeshes = new InstancedObject(gltf.scene, Game.kMaxPikas);
-        this.scene.add(this.pikaMeshes);
-        resolve();
-      }
-      );
-    });
+    const gltf = await Assets.loadMesh('pika');
+    this.pikaMeshes = new InstancedObject(gltf.scene, Game.kMaxPikas);
+    this.scene.add(this.pikaMeshes);
   }
 
   private setUpPhysics() {
@@ -174,19 +169,13 @@ export class Game {
     this.physicsWorld.addRigidBody(body);
   }
 
-  private setUpTank() {
+  private async setUpTank(): Promise<void> {
     this.addPlane(new this.ammo.btVector3(0, 1, 0), 0);
     this.addPlane(new this.ammo.btVector3(-1, 0, 0), -10);
     this.addPlane(new this.ammo.btVector3(1, 0, 0), -10);
     this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
     this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
 
-    let floorGeometry = new THREE.BoxGeometry(20, 0.01, 1);
-    let floorMesh = new THREE.Mesh(floorGeometry,
-      new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.5 }));
-    floorMesh.receiveShadow = true;
-    floorMesh.position.set(0, -0.03, 0);
-    this.scene.add(floorMesh);
-
+    await Level.load(this.scene, this.physicsWorld, 'level1');
   }
 }
