@@ -33,6 +33,8 @@ export class InstancedObject extends THREE.Object3D {
     mesh.geometry.applyMatrix4(matrix);
     const instanced = new THREE.InstancedMesh(
       mesh.geometry, mesh.material, this.maxInstanceCount);
+    instanced.receiveShadow = true;
+    instanced.castShadow = true;
     this.meshes.push(instanced);
     this.add(instanced);
   }

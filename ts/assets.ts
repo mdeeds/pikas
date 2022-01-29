@@ -10,5 +10,16 @@ export class Assets {
     });
   }
 
-
+  public static recieveShadow(model: THREE.Object3D) {
+    model.receiveShadow = true;
+    for (const c of model.children) {
+      this.recieveShadow(c);
+    }
+  }
+  public static castShadow(model: THREE.Object3D) {
+    model.castShadow = true;
+    for (const c of model.children) {
+      this.castShadow(c);
+    }
+  }
 }

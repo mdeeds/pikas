@@ -48,6 +48,8 @@ export class Game {
   private async setUpMeshes(): Promise<void> {
     const gltf = await Assets.loadMesh('pika');
     this.pikaMeshes = new InstancedObject(gltf.scene, Game.kMaxPikas);
+    Assets.castShadow(gltf.scene);
+    Assets.recieveShadow(gltf.scene);
     this.scene.add(this.pikaMeshes);
   }
 
@@ -79,13 +81,18 @@ export class Game {
 
   private setUpLight() {
     const light = new THREE.DirectionalLight(0xffffff, 1.0);
-    light.castShadow = true;
-    light.shadow.mapSize.width = 1024;
-    light.shadow.mapSize.height = 1024;
-    light.shadow.camera.near = 5;
-    light.shadow.camera.far = 1000;
     light.position.set(50, 100, 0);
     light.target.position.set(0, 0, 0);
+    light.castShadow = true;
+    light.shadow.camera.near = 50;
+    light.shadow.camera.far = 150;
+    light.shadow.camera.left = -2.5;
+    light.shadow.camera.right = 2.5;
+    light.shadow.camera.top = -10;
+    light.shadow.camera.bottom = 10;
+    light.shadow.bias = -0.001;
+    light.shadow.mapSize.width = 512;
+    light.shadow.mapSize.height = 2048;
     this.scene.add(light);
 
     // const ambient = new THREE.AmbientLight(0xddddff, 0.2);

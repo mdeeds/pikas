@@ -7,7 +7,8 @@ export class Level {
     physicsWorld: Ammo.btDiscreteDynamicsWorld,
     levelName: string) {
     const gltf = await Assets.loadMesh(levelName);
+    Assets.recieveShadow(gltf.scene);
+    Assets.castShadow(gltf.scene);
     scene.add(gltf.scene);
-
   }
 }
