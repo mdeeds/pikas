@@ -15,6 +15,7 @@ export class Game {
   private renderer: THREE.WebGLRenderer;
   private clock: THREE.Clock;
   private physicsWorld: Ammo.btDiscreteDynamicsWorld;
+  private movingObjects: THREE.Object3D[] = [];
   private pikas: Pika[] = [];
   private flock = new Flock();
   private pikaMeshes: InstancedObject;
@@ -116,21 +117,41 @@ export class Game {
     const pika = new Pika(new THREE.Vector3(
       -9.5, 0.75, 0.01 * (Math.random() - 0.5)),
       this.ammo, this.physicsWorld, this.pikaMeshes);
+    this.movingObjects.push(pika.getObject3D());
     this.pikas.push(pika);
     this.flock.add(pika);
   }
 
+  private updatePositionFromPhysics(object: THREE.Object3D) {
+    // Set position and rotation to match Physics.
+    const physicsObject = object.userData['physicsObject'] as Ammo.btRigidBody;
+    if (!physicsObject) {
+      return;
+    }
+    const worldTransform = physicsObject.getWorldTransform();
+    const position = worldTransform.getOrigin();
+    object.position.set(position.x(), position.y(), position.z());
+    const rotation = worldTransform.getRotation();
+    object.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+    object.updateMatrixWorld();
+  }
+
   private v1 = new THREE.Vector3();
+  private elapsedS = 0;
   private animationLoop() {
-    const deltaS = this.clock.getDelta();
+    const deltaS = Math.min(this.clock.getDelta(), 0.1);
+    this.elapsedS += deltaS;
     if (this.clock.elapsedTime > this.pikas.length &&
       this.pikas.length < Game.kMaxPikas) {
       this.addPika();
     }
 
     this.physicsWorld.stepSimulation(deltaS, /*substeps=*/10);
+    for (const p of this.movingObjects) {
+      this.updatePositionFromPhysics(p);
+    }
     for (const p of this.pikas) {
-      p.updatePositionFromPhysics(this.clock.elapsedTime);
+      p.step(this.elapsedS)
     }
     this.flock.update();
     this.v1.set(0, 0, 0);

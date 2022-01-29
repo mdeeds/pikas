@@ -37,6 +37,10 @@ export class Pika {
     return this.dummy.matrixWorld;
   }
 
+  public getObject3D(): THREE.Object3D {
+    return this.dummy;
+  }
+
   // rotation is a vector in the direction of the axis of rotation.
   // Length of the vector is the rate of rotation in radians per second.
   public setTorque(rotation: THREE.Vector3) {
@@ -45,16 +49,8 @@ export class Pika {
     this.physicsObject.applyTorque(this.btV1);
   }
 
-  public updatePositionFromPhysics(elapsedS: number) {
-    // Set position and rotation to match Physics.
-    const worldTransform = this.physicsObject.getWorldTransform();
-    const position = worldTransform.getOrigin();
-    this.dummy.position.set(position.x(), position.y(), position.z());
-    const rotation = worldTransform.getRotation();
-    this.dummy.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
-    this.dummy.updateMatrixWorld();
+  public step(elapsedS: number) {
     this.instanced.setMatrixAt(this.instanceId, this.dummy.matrix);
-
     // TODO: Also confirm that Pika is touching the ground.
     const force = 1.2 * Math.cos(elapsedS * 4 * Math.PI);
     if (force > 0) {
@@ -89,6 +85,7 @@ export class Pika {
     this.physicsWorld.addRigidBody(outerBody);
 
     this.physicsObject = outerBody;
+    this.dummy.userData['physicsObject'] = this.physicsObject;
   }
 
   private makeRigidBody(shape: Ammo.btSphereShape | Ammo.btBvhTriangleMeshShape,
