@@ -163,7 +163,7 @@ export class Assets {
 
   public static makeRigidBody(
     object: THREE.Object3D, ammo: typeof Ammo,
-    shape: Ammo.btSphereShape | Ammo.btBvhTriangleMeshShape,
+    shape: Ammo.btSphereShape | Ammo.btBvhTriangleMeshShape | Ammo.btBoxShape,
     mass: number): Ammo.btRigidBody {
 
     const btTx = new ammo.btTransform();

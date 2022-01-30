@@ -1,8 +1,6 @@
 import * as THREE from "three";
 import Ammo from "ammojs-typed";
-import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { InstancedObject } from "./instancedObject";
-import { Matrix4 } from "three";
 import { Assets } from "./assets";
 
 export class Pika {

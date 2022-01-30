@@ -332,6 +332,7 @@ const instancedObject_1 = __webpack_require__(62);
 const flock_1 = __webpack_require__(755);
 const level_1 = __webpack_require__(728);
 const assets_1 = __webpack_require__(398);
+const hand_1 = __webpack_require__(673);
 class Game {
     ammo;
     static kMaxPikas = 100;
@@ -342,12 +343,15 @@ class Game {
     clock;
     physicsWorld;
     movingObjects = [];
+    kinematicObjects = [];
     pikas = [];
     flock = new flock_1.Flock();
     pikaMeshes;
     keysDown = new Set();
+    btTx;
     constructor(ammo) {
         this.ammo = ammo;
+        this.btTx = new ammo.btTransform();
         this.renderer = new THREE.WebGLRenderer();
         this.scene = new THREE.Scene();
         this.setUp();
@@ -367,6 +371,7 @@ class Game {
         await this.setUpTank();
         this.setUpRenderer();
         this.setUpAnimation();
+        this.setUpHands();
         this.setUpKeyboard();
     }
     async setUpMeshes() {
@@ -375,6 +380,10 @@ class Game {
         assets_1.Assets.castShadow(gltf.scene);
         assets_1.Assets.recieveShadow(gltf.scene);
         this.scene.add(this.pikaMeshes);
+    }
+    setUpHands() {
+        new hand_1.Hand('left', this.renderer, this.scene, this.ammo, this.physicsWorld, this.kinematicObjects);
+        new hand_1.Hand('right', this.renderer, this.scene, this.ammo, this.physicsWorld, this.kinematicObjects);
     }
     setUpPhysics() {
         // Physics configuration
@@ -387,7 +396,7 @@ class Game {
     }
     setUpCamera() {
         this.dolly = new THREE.Group();
-        this.dolly.position.set(0, 0, 3);
+        this.dolly.position.set(0, 0, 1.5);
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, /*near=*/ 0.1, 
         /*far=*/ 100);
         this.camera.position.set(0, 1.7, 0);
@@ -429,6 +438,7 @@ class Game {
         this.pikas.push(pika);
         this.flock.add(pika);
     }
+    // Moves 'object' to reflect the position of its physics object.
     updatePositionFromPhysics(object) {
         // Set position and rotation to match Physics.
         const physicsObject = object.userData['physicsObject'];
@@ -442,6 +452,17 @@ class Game {
         object.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
         object.updateMatrixWorld();
     }
+    // Moves the physics object to the position of 'object'
+    updatePhysicsPosition(object) {
+        // Set position and rotation to match Physics.
+        const physicsObject = object.userData['physicsObject'];
+        if (!physicsObject) {
+            return;
+        }
+        object.updateMatrixWorld();
+        this.btTx.setFromOpenGLMatrix(object.matrixWorld.toArray());
+        physicsObject.setWorldTransform(this.btTx);
+    }
     v1 = new THREE.Vector3();
     elapsedS = 0;
     animationLoop() {
@@ -454,6 +475,9 @@ class Game {
         this.physicsWorld.stepSimulation(deltaS, /*substeps=*/ 10);
         for (const p of this.movingObjects) {
             this.updatePositionFromPhysics(p);
+        }
+        for (const k of this.kinematicObjects) {
+            this.updatePhysicsPosition(k);
         }
         for (const p of this.pikas) {
             p.step(this.elapsedS);
@@ -505,6 +529,78 @@ class Game {
 }
 exports.Game = Game;
 //# sourceMappingURL=game.js.map
+
+/***/ }),
+
+/***/ 673:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Hand = void 0;
+const THREE = __importStar(__webpack_require__(578));
+const assets_1 = __webpack_require__(398);
+class Hand {
+    side;
+    scene;
+    ammo;
+    physicsWorld;
+    gamepad;
+    grip;
+    constructor(side, renderer, scene, ammo, physicsWorld, kinematicObjects) {
+        this.side = side;
+        this.scene = scene;
+        this.ammo = ammo;
+        this.physicsWorld = physicsWorld;
+        const index = (side == 'left') ? 0 : 1;
+        this.grip = renderer.xr.getControllerGrip(index);
+        const pads = window.navigator.getGamepads();
+        if (pads.length > index) {
+            this.gamepad = pads[index];
+        }
+        this.setUpMeshes();
+        this.setUpPhysics(kinematicObjects);
+    }
+    setUpMeshes() {
+        const handGeometry = new THREE.BoxGeometry(0.15, 0.02, 0.20);
+        const handMesh = new THREE.Mesh(handGeometry, new THREE.MeshStandardMaterial({ color: 'orange', roughness: 0.9 }));
+        this.grip.add(handMesh);
+        this.scene.add(this.grip);
+    }
+    setUpPhysics(kinematicObjects) {
+        const halfWidths = new this.ammo.btVector3(0.075, 0.01, 0.10);
+        const shape = new this.ammo.btBoxShape(halfWidths);
+        const body = assets_1.Assets.makeRigidBody(this.grip, this.ammo, shape, 0);
+        // https://pybullet.org/Bullet/BulletFull/btCollisionObject_8h_source.html
+        // CF_KINEMATIC_OBJECT= 2,
+        body.setCollisionFlags(body.getCollisionFlags() | 2);
+        this.physicsWorld.addRigidBody(body);
+        kinematicObjects.push(this.grip);
+        this.grip.userData['physicsObject'] = body;
+    }
+}
+exports.Hand = Hand;
+//# sourceMappingURL=hand.js.map
 
 /***/ }),
 

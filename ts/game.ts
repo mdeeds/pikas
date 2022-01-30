@@ -6,6 +6,7 @@ import { InstancedObject } from "./instancedObject";
 import { Flock } from "./flock";
 import { Level } from "./level";
 import { Assets } from "./assets";
+import { Hand } from "./hand";
 
 export class Game {
   public static kMaxPikas = 100;
@@ -16,12 +17,16 @@ export class Game {
   private clock: THREE.Clock;
   private physicsWorld: Ammo.btDiscreteDynamicsWorld;
   private movingObjects: THREE.Object3D[] = [];
+  private kinematicObjects: THREE.Object3D[] = [];
   private pikas: Pika[] = [];
   private flock = new Flock();
   private pikaMeshes: InstancedObject;
   private keysDown = new Set<string>();
 
+  private btTx: Ammo.btTransform;
+
   private constructor(private ammo: typeof Ammo) {
+    this.btTx = new ammo.btTransform();
     this.renderer = new THREE.WebGLRenderer();
     this.scene = new THREE.Scene();
     this.setUp();
@@ -43,6 +48,7 @@ export class Game {
     await this.setUpTank();
     this.setUpRenderer();
     this.setUpAnimation();
+    this.setUpHands();
     this.setUpKeyboard();
   }
 
@@ -52,6 +58,13 @@ export class Game {
     Assets.castShadow(gltf.scene);
     Assets.recieveShadow(gltf.scene);
     this.scene.add(this.pikaMeshes);
+  }
+
+  private setUpHands() {
+    new Hand('left', this.renderer, this.scene, this.ammo,
+      this.physicsWorld, this.kinematicObjects);
+    new Hand('right', this.renderer, this.scene, this.ammo,
+      this.physicsWorld, this.kinematicObjects)
   }
 
   private setUpPhysics() {
@@ -70,7 +83,7 @@ export class Game {
 
   private setUpCamera() {
     this.dolly = new THREE.Group();
-    this.dolly.position.set(0, 0, 3);
+    this.dolly.position.set(0, 0, 1.5);
     this.camera = new THREE.PerspectiveCamera(
       75, window.innerWidth / window.innerHeight, /*near=*/0.1,
       /*far=*/100);
@@ -122,6 +135,7 @@ export class Game {
     this.flock.add(pika);
   }
 
+  // Moves 'object' to reflect the position of its physics object.
   private updatePositionFromPhysics(object: THREE.Object3D) {
     // Set position and rotation to match Physics.
     const physicsObject = object.userData['physicsObject'] as Ammo.btRigidBody;
@@ -134,6 +148,18 @@ export class Game {
     const rotation = worldTransform.getRotation();
     object.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
     object.updateMatrixWorld();
+  }
+
+  // Moves the physics object to the position of 'object'
+  private updatePhysicsPosition(object: THREE.Object3D) {
+    // Set position and rotation to match Physics.
+    const physicsObject = object.userData['physicsObject'] as Ammo.btRigidBody;
+    if (!physicsObject) {
+      return;
+    }
+    object.updateMatrixWorld();
+    this.btTx.setFromOpenGLMatrix(object.matrixWorld.toArray());
+    physicsObject.setWorldTransform(this.btTx);
   }
 
   private v1 = new THREE.Vector3();
@@ -149,6 +175,9 @@ export class Game {
     this.physicsWorld.stepSimulation(deltaS, /*substeps=*/10);
     for (const p of this.movingObjects) {
       this.updatePositionFromPhysics(p);
+    }
+    for (const k of this.kinematicObjects) {
+      this.updatePhysicsPosition(k);
     }
     for (const p of this.pikas) {
       p.step(this.elapsedS)
