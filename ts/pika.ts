@@ -3,6 +3,7 @@ import Ammo from "ammojs-typed";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { InstancedObject } from "./instancedObject";
 import { Matrix4 } from "three";
+import { Assets } from "./assets";
 
 export class Pika {
   private btV1: Ammo.btVector3;
@@ -79,37 +80,10 @@ export class Pika {
 
     outerShell.setMargin(0.01);
     const outerBody =
-      this.makeRigidBody(outerShell, 0.002/*kg*/, 0, 0);
-    outerBody.setFriction(0.9);
-    outerBody.setRestitution(0.1);
+      Assets.makeRigidBody(this.dummy, this.ammo, outerShell, 0.002/*kg*/);
     this.physicsWorld.addRigidBody(outerBody);
 
     this.physicsObject = outerBody;
-    this.dummy.userData['physicsObject'] = this.physicsObject;
+    this.dummy.userData['physicsObject'] = outerBody;
   }
-
-  private makeRigidBody(shape: Ammo.btSphereShape | Ammo.btBvhTriangleMeshShape,
-    mass: number, offsetY: number, offsetZ: number): Ammo.btRigidBody {
-    this.btTx.setIdentity();
-    this.btV1.setValue(
-      this.dummy.position.x,
-      this.dummy.position.y + offsetY,
-      this.dummy.position.z + offsetZ);
-    this.btTx.setOrigin(this.btV1);
-    this.btQ.setValue(
-      this.dummy.quaternion.x,
-      this.dummy.quaternion.y,
-      this.dummy.quaternion.z,
-      this.dummy.quaternion.w);
-    this.btTx.setRotation(this.btQ);
-    const motionState = new this.ammo.btDefaultMotionState(this.btTx);
-    this.btV1.setValue(0, 0, 0);
-    shape.calculateLocalInertia(mass, this.btV1);
-    const body = new this.ammo.btRigidBody(
-      new this.ammo.btRigidBodyConstructionInfo(
-        mass, motionState, shape, this.btV1));
-    body.setRestitution(0.8);
-    return body;
-  }
-
 }

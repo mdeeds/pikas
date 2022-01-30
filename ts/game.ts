@@ -198,12 +198,13 @@ export class Game {
   }
 
   private async setUpTank(): Promise<void> {
-    this.addPlane(new this.ammo.btVector3(0, 1, 0), 0);
+    // this.addPlane(new this.ammo.btVector3(0, 1, 0), 0);
     this.addPlane(new this.ammo.btVector3(-1, 0, 0), -10);
     this.addPlane(new this.ammo.btVector3(1, 0, 0), -10);
     this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
     this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
 
-    await Level.load(this.scene, this.physicsWorld, 'level1');
+    await Level.load(this.scene, this.physicsWorld,
+      this.ammo, this.movingObjects, 'level1');
   }
 }

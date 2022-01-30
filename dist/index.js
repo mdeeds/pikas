@@ -2,13 +2,33 @@
 /******/ 	var __webpack_modules__ = ({
 
 /***/ 398:
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Assets = void 0;
 const GLTFLoader_js_1 = __webpack_require__(687);
+const THREE = __importStar(__webpack_require__(578));
 class Assets {
     static async loadMesh(model) {
         return new Promise((resolve) => {
@@ -17,6 +37,15 @@ class Assets {
                 resolve(gltf);
             });
         });
+    }
+    static logNamesInternal(object, prefix) {
+        console.log(`${prefix}${object.name}`);
+        for (const c of object.children) {
+            this.logNamesInternal(c, ' ' + prefix);
+        }
+    }
+    static logNames(model) {
+        Assets.logNamesInternal(model, '');
     }
     static recieveShadow(model) {
         model.receiveShadow = true;
@@ -29,6 +58,131 @@ class Assets {
         for (const c of model.children) {
             this.castShadow(c);
         }
+    }
+    static addGeometryToShape(geometry, transform, mesh, ammo) {
+        let numInward = 0;
+        let numOutward = 0;
+        const positionAttribute = geometry.attributes.position;
+        if (!geometry.index) {
+            throw new Error("Must have index.");
+        }
+        const index = geometry.index;
+        for (var i = 0; i < index.count / 3; i++) {
+            const vertexAIndex = index.getX(i * 3);
+            const vertexBIndex = index.getX(i * 3 + 1);
+            const vertexCIndex = index.getX(i * 3 + 2);
+            const a = new THREE.Vector3();
+            a.fromBufferAttribute(positionAttribute, vertexAIndex);
+            a.applyMatrix4(transform);
+            const b = new THREE.Vector3();
+            b.fromBufferAttribute(positionAttribute, vertexBIndex);
+            b.applyMatrix4(transform);
+            const c = new THREE.Vector3();
+            c.fromBufferAttribute(positionAttribute, vertexCIndex);
+            c.applyMatrix4(transform);
+            mesh.addTriangle(new ammo.btVector3(a.x, a.y, a.z), new ammo.btVector3(b.x, b.y, b.z), new ammo.btVector3(c.x, c.y, c.z), false);
+            b.sub(a);
+            c.sub(a);
+            b.cross(c);
+            let direction = a.dot(b);
+            if (direction > 0) {
+                ++numOutward;
+            }
+            else {
+                ++numInward;
+            }
+        }
+    }
+    static addToShapeFromObject(object, mesh, ammo) {
+        Assets.logNamesInternal(object, 'A:');
+        if (object instanceof THREE.Mesh) {
+            object.updateMatrix();
+            const matrix = new THREE.Matrix4();
+            matrix.copy(object.matrix);
+            let o = object.parent;
+            while (o) {
+                o.updateMatrix();
+                matrix.premultiply(o.matrix);
+                o = o.parent;
+            }
+            const geometry = object.geometry;
+            Assets.addGeometryToShape(geometry, matrix, mesh, ammo);
+        }
+        for (const c of object.children) {
+            Assets.addToShapeFromObject(c, mesh, ammo);
+        }
+    }
+    static createShapeFromObject(object, ammo) {
+        const mesh = new ammo.btTriangleMesh(true, true);
+        this.addToShapeFromObject(object, mesh, ammo);
+        return mesh;
+    }
+    static signedVolumeOfTriangle(p1, p2, p3) {
+        return p1.dot(p2.cross(p3)) / 6.0;
+    }
+    static getVolumeOfGeometry(geometry) {
+        if (!geometry.index) {
+            throw new Error("Must be indexed.");
+        }
+        const index = geometry.index;
+        const position = geometry.attributes.position;
+        const triangleCount = geometry.index.count / 3;
+        let sum = 0;
+        const p1 = new THREE.Vector3(), p2 = new THREE.Vector3(), p3 = new THREE.Vector3();
+        for (let i = 0; i < triangleCount; i++) {
+            p1.fromBufferAttribute(position, index.getX(i * 3 + 0));
+            p2.fromBufferAttribute(position, index.getX(i * 3 + 1));
+            p3.fromBufferAttribute(position, index.getX(i * 3 + 2));
+            sum += Assets.signedVolumeOfTriangle(p1, p2, p3);
+        }
+        return sum * 1000; // Convert from cubic meters to liters
+    }
+    static getVolumeOfObject(object) {
+        if (object instanceof THREE.Mesh) {
+            return Assets.getVolumeOfGeometry(object.geometry);
+        }
+        else {
+            let total = 0;
+            for (const c of object.children) {
+                total += this.getVolumeOfObject(c);
+            }
+            console.error("Not implemented.");
+            return total;
+        }
+    }
+    static annotatePhysicsObject(object, density, ammo, physicsWorld) {
+        const btMesh = Assets.createShapeFromObject(object, ammo);
+        const volume = Assets.getVolumeOfObject(object);
+        const radius = Math.pow(volume / (4 / 3 * Math.PI), 1 / 3) / 10;
+        console.log(`Radius: ${radius}`);
+        const shape = (density === 0) ?
+            new ammo.btBvhTriangleMeshShape(btMesh, true, true) :
+            new ammo.btSphereShape(radius);
+        shape.setMargin(0.01);
+        const mass = density * volume;
+        console.log(`Volume: ${volume}; Mass: ${mass}`);
+        const body = Assets.makeRigidBody(object, ammo, shape, mass);
+        physicsWorld.addRigidBody(body);
+        object.userData['physicsObject'] = body;
+    }
+    static makeRigidBody(object, ammo, shape, mass) {
+        const btTx = new ammo.btTransform();
+        const btQ = new ammo.btQuaternion(0, 0, 0, 0);
+        const btV1 = new ammo.btVector3();
+        btTx.setIdentity();
+        btV1.setValue(object.position.x, object.position.y, object.position.z);
+        btTx.setOrigin(btV1);
+        btQ.setValue(object.quaternion.x, object.quaternion.y, object.quaternion.z, object.quaternion.w);
+        btTx.setRotation(btQ);
+        const motionState = new ammo.btDefaultMotionState(btTx);
+        btV1.setValue(0, 0, 0);
+        shape.calculateLocalInertia(mass, btV1);
+        const body = new ammo.btRigidBody(new ammo.btRigidBodyConstructionInfo(mass, motionState, shape, btV1));
+        body.setActivationState(4); // Disable deactivation
+        body.activate(true);
+        body.setFriction(0.3);
+        body.setRestitution(0.1);
+        return body;
     }
 }
 exports.Assets = Assets;
@@ -341,12 +495,12 @@ class Game {
         this.physicsWorld.addRigidBody(body);
     }
     async setUpTank() {
-        this.addPlane(new this.ammo.btVector3(0, 1, 0), 0);
+        // this.addPlane(new this.ammo.btVector3(0, 1, 0), 0);
         this.addPlane(new this.ammo.btVector3(-1, 0, 0), -10);
         this.addPlane(new this.ammo.btVector3(1, 0, 0), -10);
         this.addPlane(new this.ammo.btVector3(0, 0, -1), -0.5);
         this.addPlane(new this.ammo.btVector3(0, 0, 1), -0.5);
-        await level_1.Level.load(this.scene, this.physicsWorld, 'level1');
+        await level_1.Level.load(this.scene, this.physicsWorld, this.ammo, this.movingObjects, 'level1');
     }
 }
 exports.Game = Game;
@@ -450,11 +604,44 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Level = void 0;
 const assets_1 = __webpack_require__(398);
 class Level {
-    static async load(scene, physicsWorld, levelName) {
+    static async load(scene, physicsWorld, ammo, movingObjects, levelName) {
         const gltf = await assets_1.Assets.loadMesh(levelName);
+        assets_1.Assets.logNames(gltf.scene);
         assets_1.Assets.recieveShadow(gltf.scene);
         assets_1.Assets.castShadow(gltf.scene);
+        Level.ripObjects(gltf.scene, ammo, scene, physicsWorld, movingObjects);
         scene.add(gltf.scene);
+    }
+    static ripObjects(object, ammo, scene, physicsWorld, movingObjects) {
+        if (object.name.startsWith('s-')) {
+            // Static object
+            console.log(`Static: ${object.name}`);
+            assets_1.Assets.annotatePhysicsObject(object, 0.0, ammo, physicsWorld);
+        }
+        else if (object.name.startsWith('p-')) {
+            // Passive object
+            console.log(`Passive: ${object.name}`);
+            assets_1.Assets.annotatePhysicsObject(object, 0.001, ammo, physicsWorld);
+            // object.parent.remove(object);
+            movingObjects.push(object);
+            return object;
+        }
+        else {
+            console.log(`Recursing: ${object.name}`);
+            const liveObjects = [];
+            for (const c of object.children) {
+                const o = Level.ripObjects(c, ammo, scene, physicsWorld, movingObjects);
+                if (o) {
+                    liveObjects.push(o);
+                }
+            }
+            // We do this here so we don't mess up the collection while we
+            // are iterating through it.
+            for (const o of liveObjects) {
+                scene.add(o);
+            }
+        }
+        return null;
     }
 }
 exports.Level = Level;
@@ -489,6 +676,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Pika = void 0;
 const THREE = __importStar(__webpack_require__(578));
+const assets_1 = __webpack_require__(398);
 class Pika {
     ammo;
     physicsWorld;
@@ -559,25 +747,10 @@ class Pika {
         this.btTx.setOrigin(this.btV1);
         outerShell.addChildShape(this.btTx, capsule);
         outerShell.setMargin(0.01);
-        const outerBody = this.makeRigidBody(outerShell, 0.002 /*kg*/, 0, 0);
-        outerBody.setFriction(0.9);
-        outerBody.setRestitution(0.1);
+        const outerBody = assets_1.Assets.makeRigidBody(this.dummy, this.ammo, outerShell, 0.002 /*kg*/);
         this.physicsWorld.addRigidBody(outerBody);
         this.physicsObject = outerBody;
-        this.dummy.userData['physicsObject'] = this.physicsObject;
-    }
-    makeRigidBody(shape, mass, offsetY, offsetZ) {
-        this.btTx.setIdentity();
-        this.btV1.setValue(this.dummy.position.x, this.dummy.position.y + offsetY, this.dummy.position.z + offsetZ);
-        this.btTx.setOrigin(this.btV1);
-        this.btQ.setValue(this.dummy.quaternion.x, this.dummy.quaternion.y, this.dummy.quaternion.z, this.dummy.quaternion.w);
-        this.btTx.setRotation(this.btQ);
-        const motionState = new this.ammo.btDefaultMotionState(this.btTx);
-        this.btV1.setValue(0, 0, 0);
-        shape.calculateLocalInertia(mass, this.btV1);
-        const body = new this.ammo.btRigidBody(new this.ammo.btRigidBodyConstructionInfo(mass, motionState, shape, this.btV1));
-        body.setRestitution(0.8);
-        return body;
+        this.dummy.userData['physicsObject'] = outerBody;
     }
 }
 exports.Pika = Pika;
